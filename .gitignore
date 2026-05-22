@@ -1,0 +1,10 @@
+.claude/
+.beads/
+AGENTS.md
+.DS_Store
+*.xcuserstate
+xcuserdata/
+build/
+DerivedData/
+Vendor/libtiredvpn.a
+Vendor/libtiredvpn.h

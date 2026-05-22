@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  push:
+    branches: [main, "feat/**"]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    name: Build (macOS)
+    runs-on: macos-14
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_15.4.app || true
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Fetch core artifacts
+        # Until the first tiredvpn-oss release publishes libtiredvpn.{a,h},
+        # this step is allowed to fail. Replace with a hard requirement once
+        # the v0.x.y release exists.
+        run: Scripts/fetch-core.sh || echo "::warning::fetch-core.sh failed — likely no published release yet"
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Build app
+        run: |
+          xcodebuild \
+            -project TiredVPN.xcodeproj \
+            -scheme TiredVPN \
+            -configuration Debug \
+            -destination 'platform=macOS' \
+            CODE_SIGNING_ALLOWED=NO \
+            build
