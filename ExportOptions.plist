@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  xcodebuild -exportArchive options for Developer ID distribution.
+  CI substitutes TEAM_ID_PLACEHOLDER with the real Team ID before invocation:
+    sed -i '' "s/TEAM_ID_PLACEHOLDER/$TEAM_ID/g" ExportOptions.plist
+-->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>method</key>
+    <string>developer-id</string>
+    <key>destination</key>
+    <string>export</string>
+    <key>teamID</key>
+    <string>TEAM_ID_PLACEHOLDER</string>
+    <key>signingStyle</key>
+    <string>manual</string>
+    <key>stripSwiftSymbols</key>
+    <true/>
+</dict>
+</plist>
