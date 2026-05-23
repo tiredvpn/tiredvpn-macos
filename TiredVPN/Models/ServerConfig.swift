@@ -1,61 +1,70 @@
 import Foundation
 import TOMLKit
 
+/// User-facing config record stored in Keychain. Maps to `internal/config/toml.ClientConfig`
+/// in tiredvpn-oss. Held separately from `client.Config` (the Go runtime struct) — see
+/// `TunnelManager.install` for the translation step.
 struct ServerConfig: Codable, Identifiable, Hashable {
     var id: UUID
     var name: String
-    var server: String
-    var port: Int
-    var strategy: String
-    var psk: String?
-    var raw: String
+    var server: String      // [server].address
+    var port: Int           // [server].port
+    var strategy: String    // [strategy].mode
+    var serverName: String? // [tls].server_name (SNI override)
+    var raw: String         // original TOML, kept for round-trip + export
 
     init(id: UUID = UUID(),
          name: String,
          server: String,
          port: Int,
          strategy: String,
-         psk: String? = nil,
+         serverName: String? = nil,
          raw: String) {
         self.id = id
         self.name = name
         self.server = server
         self.port = port
         self.strategy = strategy
-        self.psk = psk
+        self.serverName = serverName
         self.raw = raw
     }
 
-    /// Parse a TOML string into a ServerConfig.
+    /// Parse TOML matching `internal/config/toml.ClientConfig`:
     ///
-    /// Schema mirrors `internal/config` from the Go core. The TOML may either be
-    /// flat or nested under `[server]`; we accept both for forward-compat with
-    /// the Go-side config formats.
+    ///   [server]
+    ///   address = "..."
+    ///   port    = 995
+    ///
+    ///   [strategy]
+    ///   mode = "auto"
+    ///
+    ///   [tls]
+    ///   server_name = "..."  # optional
+    ///
+    /// A top-level `name = "..."` is accepted as a human label.
     static func parse(toml text: String) throws -> ServerConfig {
         let table = try TOMLTable(string: text)
 
-        let serverTable: TOMLTable = {
-            if let nested = table["server"]?.table { return nested }
-            return table
-        }()
-
-        guard let host = serverTable["server"]?.string ?? serverTable["host"]?.string,
-              !host.isEmpty else {
-            throw ConfigParseError.missing("server")
+        guard let serverTable = table["server"]?.table else {
+            throw ConfigParseError.missing("[server]")
+        }
+        guard let address = serverTable["address"]?.string, !address.isEmpty else {
+            throw ConfigParseError.missing("server.address")
         }
         guard let port = serverTable["port"]?.int else {
-            throw ConfigParseError.missing("port")
+            throw ConfigParseError.missing("server.port")
         }
-        let strategy = serverTable["strategy"]?.string ?? "auto"
-        let psk = serverTable["psk"]?.string ?? serverTable["preshared_key"]?.string
-        let name = serverTable["name"]?.string ?? "\(host):\(port)"
+
+        let strategyMode = table["strategy"]?.table?["mode"]?.string ?? "auto"
+        let sni = table["tls"]?.table?["server_name"]?.string
+        let name = table["name"]?.string ?? "\(address):\(port)"
 
         return ServerConfig(
             name: name,
-            server: host,
+            server: address,
             port: port,
-            strategy: strategy,
-            psk: psk,
+            strategy: strategyMode,
+            serverName: sni,
             raw: text
         )
     }
