@@ -29,13 +29,14 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
             completionHandler(NEVPNError(.configurationInvalid))
             return
         }
-        let strategy = (providerConfig["strategy"] as? String) ?? "auto"
+        // config_json is already in client.Config shape (ServerAddr, StrategyName,
+        // MacOSMode=true). TunFd is set separately via TiredvpnSetTunFd.
 
         // b. Network settings.
-        // TODO: derive server address + local IP/peer IP from Go ConnectFn response.
-        // For now we use the tunnel remoteAddress from the server hostname in the JSON
-        // if extractable, else a sentinel. The 10.7.0.2/24 local IP is a placeholder.
-        let remoteAddress = extractServerHost(fromConfigJSON: configJSON) ?? "0.0.0.0"
+        // TODO: derive local IP / peer IP / DNS / MTU from Go ConnectFn response.
+        // Placeholder values for now — server-side handshake will eventually
+        // provide these via state callback or a separate query.
+        let remoteAddress = extractServerAddr(fromConfigJSON: configJSON) ?? "0.0.0.0"
         os_log("startTunnel: using placeholder 10.7.0.2/24 — replace with Go ConnectFn response",
                log: log, type: .info)
 
@@ -63,7 +64,6 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
 
             self.continueStart(
                 configJSON: configJSON,
-                strategy: strategy,
                 completionHandler: completionHandler
             )
         }
@@ -71,7 +71,6 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
 
     private func continueStart(
         configJSON: String,
-        strategy: String,
         completionHandler: @escaping (Error?) -> Void
     ) {
         // d. Extract utun fd via KVC (WireGuardKit-style).
@@ -89,21 +88,8 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         // f. Hand fd to Go.
         GoBridge.setTunFd(fd)
 
-        // g. Compose start JSON.
-        // TODO: contract assumption — Go accepts a single JSON blob; we merge
-        // macos_mode/strategy into the user's config_json object. If Go expects
-        // a wrapper envelope, change here.
-        let startJSON: String
-        do {
-            startJSON = try mergeStartJSON(configJSON: configJSON, strategy: strategy)
-        } catch {
-            os_log("startTunnel: merge JSON failed: %{public}@",
-                   log: log, type: .error, String(describing: error))
-            completionHandler(NEVPNError(.configurationInvalid))
-            return
-        }
-
-        let rc = GoBridge.start(json: startJSON)
+        // g. config_json is already a fully-formed client.Config JSON; pass through.
+        let rc = GoBridge.start(json: configJSON)
         if rc != 0 {
             os_log("TiredvpnStart returned %{public}d", log: log, type: .error, rc)
             completionHandler(NSError(
@@ -167,29 +153,19 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
 
     // MARK: - helpers
 
-    /// Merges `macos_mode` and `strategy` into the user's config JSON.
-    /// Assumes `configJSON` is a JSON object.
-    private func mergeStartJSON(configJSON: String, strategy: String) throws -> String {
-        guard let data = configJSON.data(using: .utf8) else {
-            throw NSError(domain: "com.tiredvpn.macos", code: -1)
-        }
-        var obj = try JSONSerialization.jsonObject(with: data) as? [String: Any] ?? [:]
-        obj["macos_mode"] = true
-        obj["strategy"] = strategy
-        let merged = try JSONSerialization.data(withJSONObject: obj, options: [])
-        guard let str = String(data: merged, encoding: .utf8) else {
-            throw NSError(domain: "com.tiredvpn.macos", code: -2)
-        }
-        return str
-    }
-
-    /// Best-effort extraction of "server" field from config JSON for tunnelRemoteAddress.
-    private func extractServerHost(fromConfigJSON json: String) -> String? {
+    /// Pulls the host portion out of client.Config.ServerAddr ("host:port") for
+    /// `tunnelRemoteAddress`. NE just uses this as a routing hint; format errors
+    /// degrade to "0.0.0.0".
+    private func extractServerAddr(fromConfigJSON json: String) -> String? {
         guard
             let data = json.data(using: .utf8),
-            let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+            let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+            let addr = obj["ServerAddr"] as? String
         else { return nil }
-        if let s = obj["server"] as? String { return s }
-        return nil
+        // Strip port: "host:443" → "host", "[::1]:443" → "[::1]".
+        if let colon = addr.lastIndex(of: ":") {
+            return String(addr[..<colon])
+        }
+        return addr
     }
 }

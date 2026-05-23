@@ -66,12 +66,22 @@ final class TunnelManager: ObservableObject {
         proto.providerBundleIdentifier = providerBundleID
         proto.serverAddress = "\(config.server):\(config.port)"
 
-        let jsonData = try JSONEncoder().encode(config)
+        // Build a JSON in client.Config shape (PascalCase field names — no json tags
+        // on the Go struct, so encoding/json uses the field names as-is and matches
+        // case-insensitively). MacOSMode is forced server-side too, but we set it
+        // explicitly. TunFd is supplied at runtime by the extension via TiredvpnSetTunFd.
+        let clientConfig: [String: Any] = [
+            "ServerAddr": "\(config.server):\(config.port)",
+            "StrategyName": strategyOverride ?? config.strategy,
+            "MacOSMode": true,
+            "TunMode": true,
+        ]
+        let jsonData = try JSONSerialization.data(withJSONObject: clientConfig, options: [])
         let jsonString = String(data: jsonData, encoding: .utf8) ?? "{}"
 
         proto.providerConfiguration = [
             "config_json": jsonString,
-            "strategy": strategyOverride ?? config.strategy,
+            "config_id": config.id.uuidString,
         ]
 
         mgr.protocolConfiguration = proto
@@ -206,35 +216,34 @@ final class TunnelManager: ObservableObject {
     }
 
     private func readStateFile() {
+        // Envelope from extension (SharedState.publishState):
+        //   { "state": "connecting|connected|disconnected|error",
+        //     "data":  <parsed-json-payload>,
+        //     "ts":    1234567890.0 }
         guard let url = Self.appGroupURL()?.appendingPathComponent("state.json"),
-              let data = try? Data(contentsOf: url),
-              let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+              let raw = try? Data(contentsOf: url),
+              let env = try? JSONSerialization.jsonObject(with: raw) as? [String: Any]
         else { return }
 
-        if let strat = obj["strategy"] as? String {
-            lastStrategy = strat
-        }
-        lastLatency = obj["latency_ms"] as? Int
+        let data = env["data"] as? [String: Any] ?? [:]
+        if let strat = data["strategy"] as? String { lastStrategy = strat }
+        if let lat = data["latency_ms"] as? Int { lastLatency = lat }
 
-        if let status = obj["state"] as? String {
-            switch status {
-            case "connected":
-                state = .connected(strategy: lastStrategy, latencyMs: lastLatency)
-            case "connecting":
-                state = .connecting
-            case "reasserting":
-                state = .reasserting
-            case "disconnecting":
-                state = .disconnecting
-            case "disconnected":
-                state = .disconnected
-            case "error":
-                let msg = (obj["error"] as? String) ?? "unknown"
-                state = .error(msg)
-            default:
-                updateStateFromConnection()
-            }
-        } else {
+        guard let status = env["state"] as? String else {
+            updateStateFromConnection()
+            return
+        }
+        switch status {
+        case "connected":
+            state = .connected(strategy: lastStrategy, latencyMs: lastLatency)
+        case "connecting":
+            state = .connecting
+        case "disconnected":
+            state = .disconnected
+        case "error":
+            let msg = (data["error"] as? String) ?? "unknown"
+            state = .error(msg)
+        default:
             updateStateFromConnection()
         }
     }

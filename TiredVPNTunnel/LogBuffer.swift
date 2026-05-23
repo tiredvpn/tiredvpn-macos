@@ -24,9 +24,7 @@ final class LogBuffer {
     }
 
     /// Non-blocking: schedules append on a serial queue, drops on overflow.
-    func append(level: Int32, msg: String) {
-        // Best-effort backpressure check. Reading `pending` outside the queue is racy
-        // but acceptable — it's only a hint to drop early.
+    func append(_ msg: String) {
         if pending >= queueCap {
             queue.async { [weak self] in
                 guard let self = self else { return }
@@ -38,9 +36,8 @@ final class LogBuffer {
 
         queue.async { [weak self] in
             guard let self = self else { return }
-            self.pending -= 1 // we decrement first because we incremented optimistically below
-
-            self.writeLine(level: level, msg: msg)
+            self.pending -= 1
+            self.writeLine(msg)
         }
         pending += 1
     }
@@ -67,11 +64,11 @@ final class LogBuffer {
         return h
     }
 
-    private func writeLine(level: Int32, msg: String) {
+    private func writeLine(_ msg: String) {
         guard let h = openHandle() else { return }
 
         let ts = ISO8601DateFormatter().string(from: Date())
-        let line = "\(ts) [\(level)] \(msg)\n"
+        let line = "\(ts) \(msg)\n"
         guard let data = line.data(using: .utf8) else { return }
 
         do {
