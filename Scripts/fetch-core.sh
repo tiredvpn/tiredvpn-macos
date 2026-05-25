@@ -8,7 +8,7 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 VENDOR_DIR="$REPO_ROOT/Vendor"
 VERSION_FILE="$VENDOR_DIR/VERSION"
 
-RELEASES_BASE="https://github.com/tazhate/tiredvpn-oss/releases/download"
+RELEASES_BASE="https://github.com/tiredvpn/tiredvpn-oss/releases/download"
 
 # Resolve version: $LIBTIREDVPN_VERSION env wins; otherwise Vendor/VERSION.
 if [[ -n "${LIBTIREDVPN_VERSION:-}" ]]; then

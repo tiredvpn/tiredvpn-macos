@@ -10,7 +10,7 @@ End-to-end runbook for cutting a notarized DMG release.
   `.p12` (Keychain Access → My Certificates → Export).
 - All required secrets configured in GitHub repo settings — see
   [`Scripts/ci/README.md`](../Scripts/ci/README.md).
-- A published release of `tazhate/tiredvpn-oss` containing
+- A published release of `tiredvpn/tiredvpn-oss` containing
   `libtiredvpn.a`, `libtiredvpn.h`, and matching `.sha256` files.
 
 ## Release procedure
