@@ -1,6 +1,7 @@
 .claude/
 .beads/
 AGENTS.md
+PLAN.md
 .DS_Store
 *.xcuserstate
 xcuserdata/
@@ -8,3 +9,6 @@ build/
 DerivedData/
 Vendor/libtiredvpn.a
 Vendor/libtiredvpn.h
+*.o
+TiredVPN.xcodeproj/
+.dev/
