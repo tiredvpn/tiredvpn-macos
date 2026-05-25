@@ -1,16 +1,14 @@
-# Release pipeline: build → sign → notarize → DMG → GitHub release.
+# Release pipeline: build unsigned → DMG → GitHub release.
 #
-# Required repository secrets:
-#   APPLE_ID         — Apple ID email for notarytool
-#   APP_PASSWORD     — app-specific password (appleid.apple.com → App-Specific Passwords)
-#   TEAM_ID          — Apple Developer Team ID (10 chars)
-#   CERT_P12_BASE64  — base64-encoded Developer ID Application .p12
-#   CERT_PASSWORD    — password protecting the .p12
-#   GITHUB_TOKEN     — provided automatically; used by softprops/action-gh-release
+# Required repository secrets: none (unsigned build).
+# GITHUB_TOKEN is provided automatically for release upload.
 #
 # Triggered on `v*.*.*` tag push (publishes release) or workflow_dispatch
 # (build only, no upload). The workflow_dispatch input `libtiredvpn_version`
 # overrides Vendor/VERSION for testing against an unreleased core.
+#
+# NOTE: The resulting .app is unsigned. On first launch users must
+# right-click → Open (or: xattr -rd com.apple.quarantine TiredVPN.app).
 
 name: release
 
@@ -27,16 +25,11 @@ on:
 
 jobs:
   build:
-    name: build-sign-notarize
+    name: build-dmg
     runs-on: macos-14
-    timeout-minutes: 45
+    timeout-minutes: 30
 
     env:
-      APPLE_ID: ${{ secrets.APPLE_ID }}
-      APP_PASSWORD: ${{ secrets.APP_PASSWORD }}
-      TEAM_ID: ${{ secrets.TEAM_ID }}
-      CERT_P12_BASE64: ${{ secrets.CERT_P12_BASE64 }}
-      CERT_PASSWORD: ${{ secrets.CERT_PASSWORD }}
       LIBTIREDVPN_VERSION: ${{ github.event.inputs.libtiredvpn_version }}
 
     steps:
@@ -44,8 +37,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install build tools
-        run: |
-          brew install xcodegen create-dmg
+        run: brew install xcodegen
 
       - name: Fetch Go core artifact (libtiredvpn.a + .h)
         run: ./Scripts/fetch-core.sh
@@ -53,16 +45,7 @@ jobs:
       - name: Generate Xcode project
         run: xcodegen generate
 
-      - name: Import code-signing certificate
-        run: ./Scripts/ci/import-cert.sh
-
-      - name: Prepare ExportOptions.plist
-        # ExportOptions.plist ships with TEAM_ID_PLACEHOLDER; CI substitutes
-        # the real team id from the TEAM_ID secret before exportArchive.
-        run: |
-          sed -i '' "s/TEAM_ID_PLACEHOLDER/${TEAM_ID}/g" ExportOptions.plist
-
-      - name: Archive
+      - name: Build (unsigned)
         run: |
           xcodebuild \
             -project TiredVPN.xcodeproj \
@@ -70,28 +53,33 @@ jobs:
             -configuration Release \
             -archivePath build/TiredVPN.xcarchive \
             -destination "generic/platform=macOS" \
-            CODE_SIGN_STYLE=Manual \
-            DEVELOPMENT_TEAM="${TEAM_ID}" \
-            CODE_SIGN_IDENTITY="Developer ID Application" \
-            OTHER_CODE_SIGN_FLAGS="--keychain ${BUILD_KEYCHAIN}" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
             archive
 
-      - name: Export archive
+      - name: Extract .app from xcarchive
         run: |
-          xcodebuild \
-            -exportArchive \
-            -archivePath build/TiredVPN.xcarchive \
-            -exportPath build/export \
-            -exportOptionsPlist ExportOptions.plist
-
-      - name: Notarize and staple .app
-        run: ./Scripts/ci/notarize.sh build/export/TiredVPN.app
+          APP_SRC="build/TiredVPN.xcarchive/Products/Applications/TiredVPN.app"
+          if [ ! -d "$APP_SRC" ]; then
+            echo "ERROR: .app not found in xcarchive. Contents:"
+            find build/TiredVPN.xcarchive -name "*.app" -maxdepth 4
+            exit 1
+          fi
+          mkdir -p build/export
+          cp -R "$APP_SRC" build/export/TiredVPN.app
 
       - name: Build DMG
-        run: ./Scripts/ci/build-dmg.sh build/export/TiredVPN.app build/TiredVPN.dmg
-
-      - name: Notarize and staple DMG
-        run: ./Scripts/ci/notarize.sh build/TiredVPN.dmg
+        run: |
+          mkdir -p build/dmg-stage
+          cp -R build/export/TiredVPN.app build/dmg-stage/
+          ln -s /Applications build/dmg-stage/Applications
+          hdiutil create \
+            -volname "TiredVPN" \
+            -srcfolder build/dmg-stage \
+            -ov \
+            -format UDZO \
+            build/TiredVPN.dmg
 
       - name: Upload DMG to release
         if: startsWith(github.ref, 'refs/tags/v')
@@ -103,10 +91,3 @@ jobs:
           prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Cleanup keychain
-        if: always()
-        run: |
-          if [[ -n "${BUILD_KEYCHAIN:-}" && -f "${BUILD_KEYCHAIN}" ]]; then
-            security delete-keychain "${BUILD_KEYCHAIN}" || true
-          fi
