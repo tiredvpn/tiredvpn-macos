@@ -27,9 +27,18 @@ jobs:
           go-version-file: tiredvpn-oss/go.mod
           cache-dependency-path: tiredvpn-oss/go.sum
 
-      - name: Build libtiredvpn.a
+      - name: Build libtiredvpn.a (universal)
         working-directory: tiredvpn-oss
-        run: make build-macos-lib
+        run: |
+          SDKROOT=$(xcrun --sdk macosx --show-sdk-path)
+          mkdir -p build/macos
+          GOOS=darwin GOARCH=arm64 CGO_ENABLED=1 SDKROOT=$SDKROOT \
+            go build -buildmode=c-archive -o build/macos/libtiredvpn-arm64.a ./cmd/tiredvpn/
+          GOOS=darwin GOARCH=amd64 CGO_ENABLED=1 SDKROOT=$SDKROOT \
+            go build -buildmode=c-archive -o build/macos/libtiredvpn-amd64.a ./cmd/tiredvpn/
+          lipo -create build/macos/libtiredvpn-arm64.a build/macos/libtiredvpn-amd64.a \
+            -output build/macos/libtiredvpn.a
+          cp build/macos/libtiredvpn-arm64.h build/macos/libtiredvpn.h
 
       - name: Copy core artifacts to Vendor/
         run: |
