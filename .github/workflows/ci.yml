@@ -11,17 +11,33 @@ jobs:
     name: Build (macOS)
     runs-on: macos-15
     steps:
-      - name: Checkout
+      - name: Checkout tiredvpn-macos
         uses: actions/checkout@v4
+
+      - name: Checkout tiredvpn-oss (Go core)
+        uses: actions/checkout@v4
+        with:
+          repository: tiredvpn/tiredvpn
+          ref: main
+          path: tiredvpn-oss
+
+      - name: Install Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: tiredvpn-oss/go.mod
+          cache-dependency-path: tiredvpn-oss/go.sum
+
+      - name: Build libtiredvpn.a
+        working-directory: tiredvpn-oss
+        run: make build-macos-lib
+
+      - name: Copy core artifacts to Vendor/
+        run: |
+          cp tiredvpn-oss/build/macos/libtiredvpn.a Vendor/libtiredvpn.a
+          cp tiredvpn-oss/build/macos/libtiredvpn.h Vendor/libtiredvpn.h
 
       - name: Install XcodeGen
         run: brew install xcodegen
-
-      - name: Fetch core artifacts
-        # Until the first tiredvpn-oss release publishes libtiredvpn.{a,h},
-        # this step is allowed to fail. Replace with a hard requirement once
-        # the v0.x.y release exists.
-        run: Scripts/fetch-core.sh || echo "::warning::fetch-core.sh failed — likely no published release yet"
 
       - name: Generate Xcode project
         run: xcodegen generate

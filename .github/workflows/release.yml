@@ -3,9 +3,7 @@
 # Required repository secrets: none (unsigned build).
 # GITHUB_TOKEN is provided automatically for release upload.
 #
-# Triggered on `v*.*.*` tag push (publishes release) or workflow_dispatch
-# (build only, no upload). The workflow_dispatch input `libtiredvpn_version`
-# overrides Vendor/VERSION for testing against an unreleased core.
+# Triggered on `v*.*.*` tag push (publishes release) or workflow_dispatch.
 #
 # NOTE: The resulting .app is unsigned. On first launch users must
 # right-click → Open (or: xattr -rd com.apple.quarantine TiredVPN.app).
@@ -18,10 +16,10 @@ on:
       - "v*.*.*"
   workflow_dispatch:
     inputs:
-      libtiredvpn_version:
-        description: "Override libtiredvpn core version (default: use Vendor/VERSION)"
+      core_ref:
+        description: "tiredvpn-oss branch/tag/sha (default: main)"
         required: false
-        default: ""
+        default: "main"
 
 jobs:
   build:
@@ -29,18 +27,34 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 30
 
-    env:
-      LIBTIREDVPN_VERSION: ${{ github.event.inputs.libtiredvpn_version }}
-
     steps:
-      - name: Checkout
+      - name: Checkout tiredvpn-macos
         uses: actions/checkout@v4
 
-      - name: Install build tools
-        run: brew install xcodegen
+      - name: Checkout tiredvpn-oss (Go core)
+        uses: actions/checkout@v4
+        with:
+          repository: tiredvpn/tiredvpn
+          ref: ${{ github.event.inputs.core_ref || 'main' }}
+          path: tiredvpn-oss
 
-      - name: Fetch Go core artifact (libtiredvpn.a + .h)
-        run: ./Scripts/fetch-core.sh
+      - name: Install Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: tiredvpn-oss/go.mod
+          cache-dependency-path: tiredvpn-oss/go.sum
+
+      - name: Build libtiredvpn.a
+        working-directory: tiredvpn-oss
+        run: make build-macos-lib
+
+      - name: Copy core artifacts to Vendor/
+        run: |
+          cp tiredvpn-oss/build/macos/libtiredvpn.a Vendor/libtiredvpn.a
+          cp tiredvpn-oss/build/macos/libtiredvpn.h Vendor/libtiredvpn.h
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
 
       - name: Generate Xcode project
         run: xcodegen generate
