@@ -3,22 +3,22 @@
 [![Release](https://github.com/tiredvpn/tiredvpn-macos/actions/workflows/release.yml/badge.svg)](https://github.com/tiredvpn/tiredvpn-macos/actions/workflows/release.yml)
 [![CI](https://github.com/tiredvpn/tiredvpn-macos/actions/workflows/ci.yml/badge.svg)](https://github.com/tiredvpn/tiredvpn-macos/actions/workflows/ci.yml)
 
-macOS GUI client for TiredVPN. A SwiftUI app paired with a `NEPacketTunnelProvider`
-extension that statically links `libtiredvpn.a` — a c-archive built from the
-[tiredvpn-oss](https://github.com/tiredvpn/tiredvpn-oss) Go core. The app handles
-UI, settings, keychain, and the `NETunnelProviderManager` lifecycle; the
-extension owns the utun fd and hands it to Go, which runs strategies and
-shuttles packets.
+> **[!WARNING]**
+> **Work in progress. Nothing here works yet.**
+>
+> The UI is a scaffold, the VPN tunnel is not connected end-to-end, and there
+> are no signed releases. If you're looking for something that actually runs -
+> come back later. Stars and issues are welcome regardless.
 
-## Download
-
-Download the latest DMG from [Releases](https://github.com/tiredvpn/tiredvpn-macos/releases/latest).
+macOS GUI client for TiredVPN. SwiftUI app + `NEPacketTunnelProvider` extension
+that statically links `libtiredvpn.a` - a c-archive built from the
+[tiredvpn/tiredvpn](https://github.com/tiredvpn/tiredvpn) Go core.
 
 ## Architecture
 
 ```
 ┌──────────────────────────────┐         ┌──────────────────────────────────┐
-│      tiredvpn-oss (Go)       │         │     tiredvpn-macos (Swift)       │
+│      tiredvpn (Go)           │         │     tiredvpn-macos (Swift)       │
 │                              │         │                                  │
 │  internal/strategy           │         │  TiredVPN.app                    │
 │  internal/tunnel             │  build  │  ├─ SwiftUI (UI, settings)       │
@@ -29,48 +29,47 @@ Download the latest DMG from [Releases](https://github.com/tiredvpn/tiredvpn-mac
                                          └──────────────────────────────────┘
 ```
 
-## Prerequisites
-
-- macOS 12+ with Xcode 15 or newer
-- [XcodeGen](https://github.com/yonaskolb/XcodeGen): `brew install xcodegen`
-- An Apple Developer account with a Network Extension entitlement (for real
-  device runs / distribution)
-
 ## Build
 
+Requires macOS 12+, Xcode 16, [XcodeGen](https://github.com/yonaskolb/XcodeGen).
+
 ```sh
-# 1. Pull the Go core artifacts (libtiredvpn.a + libtiredvpn.h) into Vendor/
-#    Version is read from Vendor/VERSION or $LIBTIREDVPN_VERSION.
-Scripts/fetch-core.sh
+# 1. Build Go core (libtiredvpn.a + libtiredvpn.h) from source
+git clone https://github.com/tiredvpn/tiredvpn tiredvpn-oss
+cd tiredvpn-oss
+SDKROOT=$(xcrun --sdk macosx --show-sdk-path)
+GOOS=darwin GOARCH=arm64 CGO_ENABLED=1 SDKROOT=$SDKROOT \
+  go build -buildmode=c-archive -o ../Vendor/libtiredvpn-arm64.a ./cmd/tiredvpn/
+GOOS=darwin GOARCH=amd64 CGO_ENABLED=1 SDKROOT=$SDKROOT \
+  go build -buildmode=c-archive -o ../Vendor/libtiredvpn-amd64.a ./cmd/tiredvpn/
+lipo -create ../Vendor/libtiredvpn-arm64.a ../Vendor/libtiredvpn-amd64.a \
+  -output ../Vendor/libtiredvpn.a
+cp ../Vendor/libtiredvpn-arm64.h ../Vendor/libtiredvpn.h
+cd ..
 
-# 2. Generate the Xcode project from project.yml
+# 2. Generate Xcode project and open
 xcodegen generate
-
-# 3. Open and build
 open TiredVPN.xcodeproj
 ```
 
 ## CI / Releasing
 
-Releases are built automatically on `macos-14` GitHub runners. To cut a release:
+CI builds on `macos-15`. Releases are unsigned DMGs - on first launch right-click
+the app and choose Open to bypass Gatekeeper.
 
-1. Pin the Go core version: `echo "v1.x.y" > Vendor/VERSION`
-2. Bump `MARKETING_VERSION` in `project.yml`
-3. Tag and push: `git tag v1.x.y && git push origin v1.x.y`
+To cut a release: tag and push.
 
-The `release` workflow builds, signs, notarizes, and uploads a DMG to GitHub Releases.
-Required secrets: `APPLE_ID`, `APP_PASSWORD`, `TEAM_ID`, `CERT_P12_BASE64`, `CERT_PASSWORD`.
-
-See [`docs/RELEASING.md`](docs/RELEASING.md) for the full runbook.
+```sh
+git tag v0.x.y && git push origin v0.x.y
+```
 
 ## Layout
 
-- `TiredVPN/` — main SwiftUI app (TunnelManager, ConfigStore)
-- `TiredVPNTunnel/` — `NEPacketTunnelProvider` extension and Go bridge
-- `Vendor/` — fetched `libtiredvpn.{a,h}` (gitignored; `VERSION` is tracked)
-- `Scripts/fetch-core.sh` — downloads and SHA-256 verifies the core artifacts
-- `project.yml` — XcodeGen project spec (source of truth, no checked-in `.xcodeproj`)
+- `TiredVPN/` - main SwiftUI app (TunnelManager, ConfigStore)
+- `TiredVPNTunnel/` - `NEPacketTunnelProvider` extension and Go bridge
+- `Vendor/` - built `libtiredvpn.{a,h}` (gitignored)
+- `project.yml` - XcodeGen spec (source of truth, `.xcodeproj` not committed)
 
 ## Related
 
-- Go core: <https://github.com/tiredvpn/tiredvpn-oss>
+- Go core: <https://github.com/tiredvpn/tiredvpn>
