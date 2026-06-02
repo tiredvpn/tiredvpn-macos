@@ -73,11 +73,9 @@ private struct SidebarRow: View {
         .padding(.horizontal, 16)
         .padding(.vertical, 9)
         .background(
-            isSelected
-                ? Color.tvPrimaryDim
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
-                    .padding(.horizontal, 8)
-                : Color.clear
+            RoundedRectangle(cornerRadius: 8)
+                .fill(isSelected ? Color.tvPrimaryDim : Color.clear)
+                .padding(.horizontal, 8)
         )
         .contentShape(Rectangle())
         .animation(.easeInOut(duration: 0.12), value: isSelected)
