@@ -3,21 +3,37 @@ import SwiftUI
 struct SettingsView: View {
     @EnvironmentObject var tunnel: TunnelManager
 
-    private var version: String {
-        let v = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
-        let b = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "?"
-        return "\(v) (\(b))"
-    }
-
     var body: some View {
         Form {
             Section {
-                LabeledContent("Version", value: version)
-                LabeledContent("Bundle ID", value: Bundle.main.bundleIdentifier ?? "—")
-                Link("GitHub repository",
-                     destination: URL(string: "https://github.com/tazhate/tiredvpn-macos")!)
+                LabeledContent("Launch at login") {
+                    Toggle("", isOn: .constant(false)).labelsHidden()
+                }
+                LabeledContent("Show in menu bar") {
+                    Toggle("", isOn: .constant(true)).labelsHidden()
+                }
             } header: {
-                Text("About")
+                Text("General")
+                    .font(.tvLabel)
+                    .foregroundStyle(Color.tvTextSecondary)
+            }
+
+            Section {
+                LabeledContent("Auto-reconnect") {
+                    Toggle("", isOn: .constant(true)).labelsHidden()
+                }
+                VStack(alignment: .leading, spacing: 2) {
+                    LabeledContent("Kill switch") {
+                        Toggle("", isOn: .constant(false)).labelsHidden()
+                    }
+                    Text("Block all traffic if VPN drops")
+                        .font(.tvCaption)
+                        .foregroundStyle(Color.tvTextSecondary)
+                }
+            } header: {
+                Text("Connection")
+                    .font(.tvLabel)
+                    .foregroundStyle(Color.tvTextSecondary)
             }
 
             Section {
@@ -26,14 +42,15 @@ struct SettingsView: View {
                 } label: {
                     Label("Uninstall VPN profile", systemImage: "trash")
                 }
-                Text("Removes the VPN configuration from System Settings. Your configs in Keychain are kept.")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+                Text("Removes the VPN configuration from System Settings. Keychain configs are kept.")
+                    .font(.tvCaption)
+                    .foregroundStyle(Color.tvTextSecondary)
             } header: {
-                Text("Maintenance")
+                Text("Advanced")
+                    .font(.tvLabel)
+                    .foregroundStyle(Color.tvTextSecondary)
             }
         }
         .formStyle(.grouped)
-        .padding()
     }
 }
