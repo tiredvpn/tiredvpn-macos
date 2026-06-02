@@ -6,28 +6,44 @@ struct LogView: View {
     @EnvironmentObject var tunnel: TunnelManager
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 0) {
             HStack {
                 Text("Tunnel log")
-                    .font(.headline)
+                    .font(.tvSubtitle)
+                    .foregroundStyle(Color.tvText)
                 Spacer()
                 Text("\(tunnel.lastLogLines.count) lines")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                Button {
-                    exportLogs()
-                } label: { Label("Export…", systemImage: "square.and.arrow.up") }
+                    .font(.tvCaption)
+                    .foregroundStyle(Color.tvTextSecondary)
             }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+
+            Divider().overlay(Color.tvBorder)
 
             ScrollView {
                 TextEditor(text: .constant(tunnel.lastLogLines.joined(separator: "\n")))
                     .font(.system(.caption, design: .monospaced))
+                    .foregroundStyle(Color.tvText)
+                    .scrollContentBackground(.hidden)
+                    .background(Color.clear)
                     .disabled(true)
-                    .frame(minHeight: 320)
+                    .frame(maxWidth: .infinity, minHeight: 320)
+                    .padding(12)
             }
-            .border(Color.secondary.opacity(0.3))
+            .background(Color.tvSurface)
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .padding(16)
         }
-        .padding()
+        .toolbar {
+            ToolbarItem {
+                Button {
+                    exportLogs()
+                } label: {
+                    Label("Export...", systemImage: "square.and.arrow.up")
+                }
+            }
+        }
     }
 
     private func exportLogs() {
@@ -37,7 +53,7 @@ struct LogView: View {
             panel.allowedContentTypes = [txt]
         }
         guard panel.runModal() == .OK, let url = panel.url else { return }
-        let content = tunnel.lastLogLines.joined(separator: "\n")
-        try? content.write(to: url, atomically: true, encoding: .utf8)
+        try? tunnel.lastLogLines.joined(separator: "\n")
+            .write(to: url, atomically: true, encoding: .utf8)
     }
 }

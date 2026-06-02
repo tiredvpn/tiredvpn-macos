@@ -1,17 +1,23 @@
 import SwiftUI
 
 struct ContentView: View {
+    @State private var selection: NavItem = .dashboard
+
     var body: some View {
-        TabView {
-            StatusView()
-                .tabItem { Label("Home", systemImage: "house") }
-            ConfigsView()
-                .tabItem { Label("Configs", systemImage: "list.bullet.rectangle") }
-            LogView()
-                .tabItem { Label("Logs", systemImage: "doc.plaintext") }
-            SettingsView()
-                .tabItem { Label("Settings", systemImage: "gearshape") }
+        NavigationSplitView(columnVisibility: .constant(.all)) {
+            SidebarView(selection: $selection)
+                .navigationSplitViewColumnWidth(min: 200, ideal: 220, max: 240)
+        } detail: {
+            Group {
+                switch selection {
+                case .dashboard: DashboardView()
+                case .servers:   ServersView()
+                case .settings:  SettingsView()
+                case .about:     AboutView()
+                }
+            }
+            .background(Color.tvBackground)
         }
-        .padding(.top, 8)
+        .navigationSplitViewStyle(.balanced)
     }
 }

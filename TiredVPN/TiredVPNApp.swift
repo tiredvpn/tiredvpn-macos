@@ -13,7 +13,7 @@ struct TiredVPNApp: App {
             ContentView()
                 .environmentObject(tunnel)
                 .environmentObject(store)
-                .frame(minWidth: 520, minHeight: 420)
+                .frame(minWidth: 680, minHeight: 480)
                 .onAppear {
                     Task {
                         await tunnel.loadManager()
